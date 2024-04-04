@@ -25,3 +25,15 @@ app.use('/', routes);
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+// console.time('Integer comparison');
+// for (let i = 0; i < 1000000; i++) {
+//     12345 === 12345;
+// }
+// console.timeEnd('Integer comparison');
+//
+// console.time('String comparison');
+// for (let i = 0; i < 1000000; i++) {
+//     '12345' === '12345';
+// }
+// console.timeEnd('String comparison');

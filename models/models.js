@@ -3,7 +3,7 @@ import {DataTypes} from "sequelize";
 
 const Santri =sequelize.define('santri',{
     nis:{
-        type:DataTypes.BIGINT.UNSIGNED,
+        type:DataTypes.STRING,
         primaryKey:true,
         allowNull:false
     },
@@ -126,7 +126,7 @@ const Absensi =sequelize.define('absensi',{
 },{freezeTableName:true,timestamps:false});
 const  Admin=sequelize.define('admin',{
     nis:{
-        type:DataTypes.BIGINT.UNSIGNED,
+        type:DataTypes.STRING,
         primaryKey:true,
         allowNull:false
     },
