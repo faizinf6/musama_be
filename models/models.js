@@ -50,8 +50,32 @@ const kelasSantri =sequelize.define('kelas_santri',{
         allowNull: false
     },
     nis_santri:{
-        type: DataTypes.BIGINT.UNSIGNED,
+        type: DataTypes.STRING,
         allowNull:false
+    },
+    kelas:{
+        type:DataTypes.STRING,
+        allowNull: false
+    },
+    pemilik:{
+        type:DataTypes.STRING,
+        allowNull: false
+    },
+    tahun_ajaran:{
+        type:DataTypes.STRING,
+        allowNull: false
+    }
+
+
+},{freezeTableName:true,timestamps:false});
+
+// ini buat nyimpan nama-nama kelas di lembaga tertentu (ada berapa kelas? apa saja?)
+const kelasLembaga =sequelize.define('kelas_lembaga',{
+    id:{
+        type:DataTypes.BIGINT.UNSIGNED,
+        autoIncrement:true,
+        primaryKey:true,
+        allowNull: false
     },
     kelas:{
         type:DataTypes.STRING,
@@ -76,6 +100,17 @@ const  Kegiatan=sequelize.define('kegiatan',{
         primaryKey:true,
         allowNull: false
     },
+    status_kegiatan:{
+        type:DataTypes.BOOLEAN,
+        allowNull:false,
+        defaultValue:true
+    },
+
+    bisa_terlambat:{
+        type:DataTypes.BOOLEAN,
+        allowNull:false,
+        defaultValue:true
+    },
     nama_kegiatan:{
         type: DataTypes.STRING,
         allowNull: false
@@ -88,12 +123,26 @@ const  Kegiatan=sequelize.define('kegiatan',{
         type:DataTypes.STRING,
         allowNull: false
     },
+    jam_terlambat:{
+        type:DataTypes.STRING,
+        allowNull: false
+    },
     jam_selesai:{
         type:DataTypes.STRING,
         allowNull: false
+    },
+    libur_perminggu:{
+        type:DataTypes.ENUM("ahad","senin","selasa","rabu","kamis","jumat","sabtu","tidak_ada"),
+        allowNull: false
+    },
+    daftar_mesin: {
+        type: DataTypes.JSON,
+        allowNull: true // Change this to false if you want it to be required
+    },
+    peserta: {
+        type: DataTypes.JSON,
+        allowNull: true // Change this to false if you want it to be required
     }
-
-
 
 },{freezeTableName:true,timestamps:false});
 const Absensi =sequelize.define('absensi',{
@@ -107,20 +156,61 @@ const Absensi =sequelize.define('absensi',{
         type: DataTypes.BIGINT.UNSIGNED,
         allowNull: false
     },
+    nis_santri:{
+        type:DataTypes.STRING,
+        allowNull:false
+    },
+
     tanggal:{
-        type:DataTypes.DATE,
+        type:DataTypes.DATEONLY,
         allowNull: false
     },
     status_absensi:{
-      type:DataTypes.ENUM('HADIR','ALPHA','SAKIT','IZIN'),
+      type:DataTypes.ENUM('HADIR','ALPA','SAKIT','IZIN'),
         allowNull: false
     },
-    is_libur:{
-        type:DataTypes.BOOLEAN,
-        allowNull: false
+    editor:{
+        type:DataTypes.STRING,
+        allowNull:false
+    },
+    last_edit:{
+        type:DataTypes.STRING,
+        allowNull:false
     }
 
 
+},{freezeTableName:true,timestamps:false});
+
+const KalenderLibur =sequelize.define('kalender_libur',{
+    id:{
+        type:DataTypes.BIGINT.UNSIGNED,
+        autoIncrement:true,
+        primaryKey:true,
+        allowNull: false
+    },
+    id_kegiatan:{
+        type: DataTypes.BIGINT.UNSIGNED,
+        allowNull: false
+    },
+    sudah_terlewati:{
+        type:DataTypes.BOOLEAN,
+        allowNull:false,
+        defaultValue:false
+    },
+
+    id_kegiatan_terimbas:{
+        type:DataTypes.JSON,
+        allowNull:false
+    },
+
+    tanggal:{
+        type:DataTypes.DATEONLY,
+        allowNull: false
+    },
+    nama_hari:{
+        type:DataTypes.STRING,
+        allowNull: false
+    }
 
 
 },{freezeTableName:true,timestamps:false});
@@ -148,7 +238,8 @@ const  Admin=sequelize.define('admin',{
     },
     nomer_hp:{
       type:DataTypes.STRING,
-        allowNull:false
+        allowNull:false,
+        unique:true
     },
     katasandi:{
         type:DataTypes.STRING,
@@ -173,6 +264,12 @@ const  Admin=sequelize.define('admin',{
     is_madin:{
         type:DataTypes.BOOLEAN,
         allowNull:false
+    },
+    atribut_mesin:{
+        type:DataTypes.JSON,
+        allowNull:false,
+        defaultValue: []
+
     }
 
 
@@ -193,4 +290,4 @@ async function syncModels() {
 }
 
 syncModels();
-export {Santri,kelasSantri,Kegiatan,Absensi,Admin}
+export {Santri,kelasSantri,Kegiatan,Absensi,Admin,KalenderLibur,kelasLembaga}

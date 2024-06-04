@@ -17,22 +17,35 @@ router.patch('/update-kelas/:id',Controller.updateOneKelas)
 router.get('/kegiatan/:id',Controller.findOneKegiatan)
 router.get('/all-kegiatan',Controller.findAllKegiatan)
 router.post('/create-kegiatan',Controller.createOneKegiatan)
-router.patch('/update-kegiatan/:id',Controller.updateOneKegiatan)
+router.patch('/update-kegiatan',Controller.updateOneKegiatan)
 
 router.get('/absensi/:id',Controller.findOneAbsensi)
 router.get('/all-absensi',Controller.findAllAbsensi)
 router.post('/create-absensi',Controller.createOneAbsensi)
-router.patch('/update-absensi/:id',Controller.updateOneAbsensi)
+router.patch('/update-absensi',Controller.updateOneAbsensi)
 
 router.get('/admin/:id',Controller.findOneAdmin)
 router.get('/all-admin',Controller.findAllAdmin)
+router.get('/all-mesin',Controller.findAllMesin)
 router.post('/create-admin',Controller.createOneAdmin)
-router.patch('/update-admin/:id',Controller.updateOneAdmin)
+router.patch('/update-admin',Controller.updateOneAdmin)
+router.post('/auth',Controller.adminLogin)
+router.post('/logout',Controller.adminLogout)
+
+router.get('/kalenderlibur/:id',Controller.findOneKalenderLibur)
+router.get('/all-kalenderlibur',Controller.findAllKalenderLibur)
+router.post('/create-kalenderlibur',Controller.createOneKalenderLibur)
+router.patch('/update-kalenderlibur/:id',Controller.updateOneKalenderLibur)
 
 
-router.get('/santri/mts', async (req, res) => {
-    res.json({ status: true, message: "Santri Mts Coooy!!" })
-});
+
+
+router.get('/:nama_instansi/:kelas_instansi/:tahun_ajaran/:page', Controller.paginationDataSantri);
+router.get('/get-absensi/:tanggal_absen/:idkegiatan/:nama_instansi/:kelas_instansi/:tahun_ajaran/:page', Controller.getDataAbsenPerkelas);
+router.get('/generate-kelas', Controller.gabungKelasSama);
+router.get('/all-kelaslembaga', Controller.findAllKelasLembaga);
+
+
 
 export default router;
 
