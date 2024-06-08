@@ -28,6 +28,7 @@ router.get('/admin/:id',Controller.findOneAdmin)
 router.get('/all-admin',Controller.findAllAdmin)
 router.get('/all-mesin',Controller.findAllMesin)
 router.post('/create-admin',Controller.createOneAdmin)
+router.post('/create-admin-banyak',Controller.createManyAdmin)
 router.patch('/update-admin',Controller.updateOneAdmin)
 router.post('/auth',Controller.adminLogin)
 router.post('/logout',Controller.adminLogout)
@@ -44,6 +45,9 @@ router.get('/:nama_instansi/:kelas_instansi/:tahun_ajaran/:page', Controller.pag
 router.get('/get-absensi/:tanggal_absen/:idkegiatan/:nama_instansi/:kelas_instansi/:tahun_ajaran/:page', Controller.getDataAbsenPerkelas);
 router.get('/generate-kelas', Controller.gabungKelasSama);
 router.get('/all-kelaslembaga', Controller.findAllKelasLembaga);
+
+
+router.get('/rekap-absensi', Controller.rekapAbsensi);
 
 
 

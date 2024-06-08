@@ -1,6 +1,6 @@
-import {Santri, kelasSantri, Kegiatan, Absensi, Admin, KalenderLibur, kelasLembaga} from "./models/models.js";
-import {Op, Sequelize, where} from "sequelize";
-
+import {Absensi, Admin, KalenderLibur, Kegiatan, kelasLembaga, kelasSantri, Santri} from "./models/models.js";
+import {Op} from "sequelize";
+import moment from 'moment-timezone';
 
 
 const tahunAjaran = {
@@ -11,22 +11,32 @@ const tahunAjaran = {
     'Pondok': '1445-1446'
 };
 
- export async function updateStatusAbsensi() {
+const keteranganKehadiranMap = {
+    'HADIR': '·',
+    'ALPA': 'A',
+    'SAKIT': 'S',
+    'IZIN': 'I',
+    'null': '-'
+};
+
+
+export async function updateStatusAbsensi() {
     const hariIndonesia = ['ahad', 'senin', 'selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const today = new Date();
     const nama_hari_ini = hariIndonesia[today.getDay()].toLowerCase();
-     console.log(today.getDay())
 
-     const dateTimeWithTimezone = today.toLocaleString('id-ID', {
-         year: 'numeric',
-         month: '2-digit',
-         day: '2-digit',
-         hour: '2-digit',
-         minute: '2-digit',
-         second: '2-digit',
-         hour12: false,
-         timeZone: 'Asia/Jakarta' // Replace with your desired timezone
-     });
+    const dateTimeWithTimezone = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
+    const localDate = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD');
+
+    const kalenderLiburPadaHariIni = await KalenderLibur.findOne({
+        where:{
+            sudah_terlewati:false,
+            tanggal:localDate
+        }
+    })
+
+
+
 
     const daftarKegiatanAktif = await Kegiatan.findAll({
         where: {
@@ -35,62 +45,139 @@ const tahunAjaran = {
     });
 
     for (let kegiatanAktif of daftarKegiatanAktif) {
+        if (kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini.toLowerCase()) {
+
+            console.log(kegiatanAktif.nama_kegiatan);
+            console.log("tidak libur perminggu");
+
+            // cek apakah hari ini ada kalender libur?
+            const libutCondition = kalenderLiburPadaHariIni ? kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id) : false
 
 
-        if (kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini.toLowerCase()){
-            console.log(kegiatanAktif.nama_kegiatan)
-            console.log("tidak libur")
+            // kalau ada cek lagi: apakah kegiatan hari ini termasuk dalam kalender libul?
+            if (libutCondition===false) {
+                console.log(kegiatanAktif.nama_kegiatan);
+                console.log("Tidak ada jadwal kalender libur pada kegiatan ini");
 
-            // for (let kelas of kegiatanAktif.peserta) {
-            //
-            //
-            //     const pesertaKegiatan = await kelasSantri.findAll({
-            //         where: {
-            //             kelas: kelas.Kelas,
-            //             tahun_ajaran: tahunAjaran[kegiatanAktif.pemilik]
-            //         }
-            //     });
-            //
-            //     for (const peserta of pesertaKegiatan) {
-            //
-            //         await Absensi.create({
-            //             id_kegiatan: kegiatanAktif.id,
-            //             nis_santri: peserta.nis_santri,
-            //             tanggal: today.toISOString().slice(0, 10),
-            //             editor: '000',
-            //             status_absensi: 'HADIR',
-            //             last_edit:dateTimeWithTimezone
-            //         });
-            //     }
-            // }
+                for (let kelas of kegiatanAktif.peserta) {
+                    const pesertaKegiatan = await kelasSantri.findAll({
+                        where: {
+                            kelas: kelas.Kelas,
+                            tahun_ajaran: tahunAjaran[kegiatanAktif.pemilik]
+                        }
+                    });
+
+                    for (const peserta of pesertaKegiatan) {
+                        const [absensi, created] = await Absensi.findOrCreate({
+                            where: {
+                                id_kegiatan: kegiatanAktif.id,
+                                nis_santri: peserta.nis_santri,
+                                tanggal: localDate
+                            },
+                            defaults: {
+                                editor: '0',
+                                status_absensi: 'ALPA',
+                                last_edit: dateTimeWithTimezone
+                            }
+                        });
+
+                        if (!created) {
+                            await absensi.update({
+                                editor: '0',
+                                status_absensi: 'ALPA',
+                                last_edit: dateTimeWithTimezone
+                            });
+                        }
+                    }
+                }
+
+
+            } else {
+                console.log(kegiatanAktif.nama_kegiatan);
+                console.log("Ada jadwal kalender libur pada kegiatan ini");
+                console.log(kalenderLiburPadaHariIni.dataValues.nama_hari)
+            }
+
+
 
 
 
 
         } else {
-
-            console.log(kegiatanAktif.nama_kegiatan)
-            console.log("libur!")
+            console.log(kegiatanAktif.nama_kegiatan);
+            console.log("libur!");
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     }
 }
 
 
+
+
+
 export class Controller {
+
+     static async rekapAbsensi (req, res) {
+        try {
+            const { id_kegiatan, nama_kelas, tahun_ajaran, tanggal_mulai, tanggal_sampai } = req.body;
+
+            const dataKegiatan = await  Kegiatan.findByPk(id_kegiatan)
+            console.log(dataKegiatan)
+            console.log(dataKegiatan.dataValues)
+            // Step 1: Collect all relevant students
+            const collectedStudents = await kelasSantri.findAll({
+                where: {
+                    kelas: nama_kelas,
+                    pemilik: dataKegiatan.dataValues.pemilik,
+                    tahun_ajaran: tahun_ajaran
+                }
+            });
+
+            // Step 2: Initialize an empty array for the response
+            const response = [];
+
+            // Step 3: Iterate over each student
+            for (const student of collectedStudents) {
+                const nis_santri = student.nis_santri;
+                const attendanceData = {};
+
+                // Step 4: Define the start and end dates
+                let currentDate = moment(tanggal_mulai, 'DD-MM-YYYY');
+                const endDate = moment(tanggal_sampai, 'DD-MM-YYYY');
+                let dayCounter = 1;
+
+                // Step 5: Loop through each day in the date range
+                while (currentDate.isSameOrBefore(endDate)) {
+                    const absensi = await Absensi.findOne({
+                        where: {
+                            nis_santri: nis_santri,
+                            id_kegiatan: id_kegiatan,
+                            tanggal: currentDate.format('YYYY-MM-DD')
+                        }
+                    });
+
+                    // Step 6: Record attendance status or mark it as "-"
+                    attendanceData[`day${dayCounter}`] = absensi ? absensi.status_absensi : "-";
+
+                    // Step 7: Move to the next day
+                    currentDate = currentDate.add(1, 'days');
+                    dayCounter++;
+                }
+
+                // Step 8: Add the student's data to the response array
+                response.push({
+                    nis_santri: nis_santri,
+                    attendance_data: attendanceData
+                });
+            }
+
+            // Step 9: Send the response as JSON
+            res.json(response);
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
 
 
 
@@ -361,20 +448,10 @@ export class Controller {
                 return res.status(404).json({ error: 'Editor not found' });
             }
 
-            const now = new Date();
-            const dateTimeWithTimezone = now.toLocaleString('id-ID', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-                timeZone: 'Asia/Jakarta' // Replace with your desired timezone
-            });
 
+            const now = new Date();
             // Add dateTimeWithTimezone to the request body
-            req.body.last_edit = dateTimeWithTimezone;
+            req.body.last_edit = moment.tz(now, 'Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
 
 
 
@@ -438,6 +515,16 @@ export class Controller {
         try {
            // const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
             const santri = await Admin.create(req.body);
+            res.status(201).json(santri);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+    static async createManyAdmin(req, res){
+        try {
+           // const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
+            console.log("babi")
+            const santri = await Admin.bulkCreate(req.body,{validate:true});
             res.status(201).json(santri);
         } catch (error) {
             res.status(400).json({ error: error.message });

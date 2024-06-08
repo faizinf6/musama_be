@@ -188,10 +188,6 @@ const KalenderLibur =sequelize.define('kalender_libur',{
         primaryKey:true,
         allowNull: false
     },
-    id_kegiatan:{
-        type: DataTypes.BIGINT.UNSIGNED,
-        allowNull: false
-    },
     sudah_terlewati:{
         type:DataTypes.BOOLEAN,
         allowNull:false,
