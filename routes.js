@@ -47,7 +47,7 @@ router.get('/generate-kelas', Controller.gabungKelasSama);
 router.get('/all-kelaslembaga', Controller.findAllKelasLembaga);
 
 
-router.get('/rekap-absensi', Controller.rekapAbsensi);
+router.post('/rekap-absensi', Controller.rekapAbsensi);
 
 
 

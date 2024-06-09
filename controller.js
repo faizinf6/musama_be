@@ -54,7 +54,6 @@ export async function updateStatusAbsensi() {
             const libutCondition = kalenderLiburPadaHariIni ? kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id) : false
 
 
-            // kalau ada cek lagi: apakah kegiatan hari ini termasuk dalam kalender libul?
             if (libutCondition===false) {
                 console.log(kegiatanAktif.nama_kegiatan);
                 console.log("Tidak ada jadwal kalender libur pada kegiatan ini");
@@ -98,11 +97,6 @@ export async function updateStatusAbsensi() {
                 console.log(kalenderLiburPadaHariIni.dataValues.nama_hari)
             }
 
-
-
-
-
-
         } else {
             console.log(kegiatanAktif.nama_kegiatan);
             console.log("libur!");
@@ -117,62 +111,87 @@ export async function updateStatusAbsensi() {
 export class Controller {
 
      static async rekapAbsensi (req, res) {
-        try {
-            const { id_kegiatan, nama_kelas, tahun_ajaran, tanggal_mulai, tanggal_sampai } = req.body;
+         try {
+             const { id_kegiatan, nama_kelas, tahun_ajaran } = req.body;
+             const dataKegiatan = await  Kegiatan.findByPk(id_kegiatan)
+             const tanggal_mulai ="01-06-2024"
+             const  tanggal_sampai="10-06-2024"
+             console.log(req.body)
 
-            const dataKegiatan = await  Kegiatan.findByPk(id_kegiatan)
-            console.log(dataKegiatan)
-            console.log(dataKegiatan.dataValues)
-            // Step 1: Collect all relevant students
-            const collectedStudents = await kelasSantri.findAll({
-                where: {
-                    kelas: nama_kelas,
-                    pemilik: dataKegiatan.dataValues.pemilik,
-                    tahun_ajaran: tahun_ajaran
-                }
-            });
+             // Step 1: Collect all relevant students
+             const collectedStudents = await kelasSantri.findAll({
+                 where: {
+                     kelas: nama_kelas,
+                     pemilik: dataKegiatan.dataValues.pemilik,
+                     tahun_ajaran: tahun_ajaran
+                 }
+             });
 
-            // Step 2: Initialize an empty array for the response
-            const response = [];
+             // Step 2: Initialize an empty array for the response
+             const response = [];
 
-            // Step 3: Iterate over each student
-            for (const student of collectedStudents) {
-                const nis_santri = student.nis_santri;
-                const attendanceData = {};
+             // Step 3: Iterate over each student
+             for (const student of collectedStudents) {
+                 const nis_santri = student.nis_santri;
+                 const datSantri = await Santri.findByPk(nis_santri)
+                 const attendanceData = {};
+                 let totalHadir = 0;
+                 let totalAlpa = 0;
+                 let totalSakit = 0;
+                 let totalIzin = 0;
 
-                // Step 4: Define the start and end dates
-                let currentDate = moment(tanggal_mulai, 'DD-MM-YYYY');
-                const endDate = moment(tanggal_sampai, 'DD-MM-YYYY');
-                let dayCounter = 1;
+                 // Step 4: Define the start and end dates
+                 let currentDate = moment(tanggal_mulai, 'DD-MM-YYYY');
+                 const endDate = moment(tanggal_sampai, 'DD-MM-YYYY');
+                 let dayCounter = 1;
 
-                // Step 5: Loop through each day in the date range
-                while (currentDate.isSameOrBefore(endDate)) {
-                    const absensi = await Absensi.findOne({
-                        where: {
-                            nis_santri: nis_santri,
-                            id_kegiatan: id_kegiatan,
-                            tanggal: currentDate.format('YYYY-MM-DD')
-                        }
-                    });
+                 // Step 5: Loop through each day in the date range
+                 while (currentDate.isSameOrBefore(endDate)) {
+                     const absensi = await Absensi.findOne({
+                         where: {
+                             nis_santri: nis_santri,
+                             id_kegiatan: id_kegiatan,
+                             tanggal: currentDate.format('YYYY-MM-DD')
+                         }
+                     });
 
-                    // Step 6: Record attendance status or mark it as "-"
-                    attendanceData[`day${dayCounter}`] = absensi ? absensi.status_absensi : "-";
+                     // Step 6: Record attendance status or mark it as "-"
+                     if (absensi) {
+                         attendanceData[`day${dayCounter}`] = absensi.status_absensi;
 
-                    // Step 7: Move to the next day
-                    currentDate = currentDate.add(1, 'days');
-                    dayCounter++;
-                }
+                         // Increment the corresponding counter
+                         if (absensi.status_absensi === 'HADIR') {
+                             totalHadir++;
+                         } else if (absensi.status_absensi === 'ALPA') {
+                             totalAlpa++;
+                         } else if (absensi.status_absensi === 'SAKIT') {
+                             totalSakit++;
+                         } else if (absensi.status_absensi === 'IZIN') {
+                             totalIzin++;
+                         }
+                     } else {
+                         attendanceData[`day${dayCounter}`] = "-";
+                     }
 
-                // Step 8: Add the student's data to the response array
-                response.push({
-                    nis_santri: nis_santri,
-                    attendance_data: attendanceData
-                });
-            }
+                     // Step 7: Move to the next day
+                     currentDate = currentDate.add(1, 'days');
+                     dayCounter++;
+                 }
 
-            // Step 9: Send the response as JSON
-            res.json(response);
-        } catch (error) {
+                 // Step 8: Add the student's data to the response array
+                 response.push({
+                     santri: datSantri.dataValues,
+                     attendance_data: attendanceData,
+                     totalHadir: totalHadir,
+                     totalAlpa: totalAlpa,
+                     totalSakit: totalSakit,
+                     totalIzin: totalIzin
+                 });
+             }
+
+             // Step 9: Send the response as JSON
+             res.json(response);
+         } catch (error) {
             console.error(error);
             res.status(500).json({ error: 'Internal Server Error' });
         }
