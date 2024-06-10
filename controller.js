@@ -19,24 +19,30 @@ const keteranganKehadiranMap = {
     'null': '-'
 };
 
+export async function updateStatusAbsensiPerbulan() {
+    const startDate = moment.tz('Asia/Jakarta').startOf('day');
 
-export async function updateStatusAbsensi() {
+    for (let i = 0; i < 30; i++) {
+        const currentDate = startDate.clone().add(i, 'days');
+        await updateStatusAbsensiPerhari(currentDate);
+    }
+}
+
+export async function updateStatusAbsensiPerhari(date) {
     const hariIndonesia = ['ahad', 'senin', 'selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-    const today = new Date();
-    const nama_hari_ini = hariIndonesia[today.getDay()].toLowerCase();
+    const nama_hari_ini = hariIndonesia[date.day()].toLowerCase();
 
-    const dateTimeWithTimezone = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
-    const localDate = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD');
+    const dateTimeWithTimezone = moment.tz(date, 'Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
+    const localDate = moment.tz(date, 'Asia/Jakarta').format('YYYY-MM-DD');
+    console.log("tanggalan");
+    console.log(localDate);
 
     const kalenderLiburPadaHariIni = await KalenderLibur.findOne({
-        where:{
-            sudah_terlewati:false,
-            tanggal:localDate
+        where: {
+            sudah_terlewati: false,
+            tanggal: localDate
         }
-    })
-
-
-
+    });
 
     const daftarKegiatanAktif = await Kegiatan.findAll({
         where: {
@@ -45,18 +51,102 @@ export async function updateStatusAbsensi() {
     });
 
     for (let kegiatanAktif of daftarKegiatanAktif) {
-        if (kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini.toLowerCase()) {
+        let statusAbsensi = '';
 
+        if (kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini.toLowerCase()) {
             console.log(kegiatanAktif.nama_kegiatan);
             console.log("tidak libur perminggu");
+            statusAbsensi = 'ALPA';
+        } else {
+            console.log(kegiatanAktif.nama_kegiatan);
+            console.log("libur!");
+            statusAbsensi = 'LIBUR';
+        }
 
-            // cek apakah hari ini ada kalender libur?
-            const libutCondition = kalenderLiburPadaHariIni ? kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id) : false
+        if (kalenderLiburPadaHariIni) {
+            if (kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id)) {
+                statusAbsensi = 'LIBUR';
+            }
+        }
+
+        for (let kelas of kegiatanAktif.peserta) {
+            const pesertaKegiatan = await kelasSantri.findAll({
+                where: {
+                    kelas: kelas.Kelas,
+                    tahun_ajaran: tahunAjaran[kegiatanAktif.pemilik]
+                }
+            });
+
+            for (const peserta of pesertaKegiatan) {
+                const [absensi, created] = await Absensi.findOrCreate({
+                    where: {
+                        id_kegiatan: kegiatanAktif.id,
+                        nis_santri: peserta.nis_santri,
+                        tanggal: localDate
+                    },
+                    defaults: {
+                        editor: '0',
+                        status_absensi: statusAbsensi,
+                        last_edit: dateTimeWithTimezone
+                    }
+                });
+
+                if (!created) {
+                    await absensi.update({
+                        editor: '0',
+                        status_absensi: statusAbsensi,
+                        last_edit: dateTimeWithTimezone
+                    });
+                }
+            }
+        }
+    }
+}
 
 
-            if (libutCondition===false) {
-                console.log(kegiatanAktif.nama_kegiatan);
-                console.log("Tidak ada jadwal kalender libur pada kegiatan ini");
+
+export async function updateStatusAbsensi() {
+    const hariIndonesia = ['ahad', 'senin', 'selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const today = new Date();
+    const nama_hari_ini = hariIndonesia[today.getDay()].toLowerCase();
+
+    const dateTimeWithTimezone = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
+    const localDate = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD');
+    console.log("tanggalan")
+    console.log(localDate)
+
+    const kalenderLiburPadaHariIni = await KalenderLibur.findOne({
+        where:{
+            sudah_terlewati:false,
+            tanggal:localDate
+        }
+    })
+
+    const daftarKegiatanAktif = await Kegiatan.findAll({
+        where: {
+            status_kegiatan: true
+        }
+    });
+
+    for (let kegiatanAktif of daftarKegiatanAktif) {
+        let statusAbsensi = ''
+
+        if (kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini.toLowerCase()) {
+            console.log(kegiatanAktif.nama_kegiatan);
+            console.log("tidak libur perminggu");
+            statusAbsensi = 'ALPA'
+
+        } else {
+            console.log(kegiatanAktif.nama_kegiatan);
+            console.log("libur!");
+            statusAbsensi='LIBUR'
+        }
+
+        if (kalenderLiburPadaHariIni){
+            if (kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id))
+                statusAbsensi='LIBUR'
+        }
+
 
                 for (let kelas of kegiatanAktif.peserta) {
                     const pesertaKegiatan = await kelasSantri.findAll({
@@ -75,7 +165,7 @@ export async function updateStatusAbsensi() {
                             },
                             defaults: {
                                 editor: '0',
-                                status_absensi: 'ALPA',
+                                status_absensi: statusAbsensi,
                                 last_edit: dateTimeWithTimezone
                             }
                         });
@@ -83,7 +173,7 @@ export async function updateStatusAbsensi() {
                         if (!created) {
                             await absensi.update({
                                 editor: '0',
-                                status_absensi: 'ALPA',
+                                status_absensi: statusAbsensi,
                                 last_edit: dateTimeWithTimezone
                             });
                         }
@@ -91,16 +181,9 @@ export async function updateStatusAbsensi() {
                 }
 
 
-            } else {
-                console.log(kegiatanAktif.nama_kegiatan);
-                console.log("Ada jadwal kalender libur pada kegiatan ini");
-                console.log(kalenderLiburPadaHariIni.dataValues.nama_hari)
-            }
 
-        } else {
-            console.log(kegiatanAktif.nama_kegiatan);
-            console.log("libur!");
-        }
+
+
     }
 }
 
@@ -115,7 +198,7 @@ export class Controller {
              const { id_kegiatan, nama_kelas, tahun_ajaran } = req.body;
              const dataKegiatan = await  Kegiatan.findByPk(id_kegiatan)
              const tanggal_mulai ="01-06-2024"
-             const  tanggal_sampai="10-06-2024"
+             const  tanggal_sampai="30-06-2024"
              console.log(req.body)
 
              // Step 1: Collect all relevant students

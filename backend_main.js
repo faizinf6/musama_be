@@ -5,7 +5,7 @@ import session from 'express-session';
 import dotenv from 'dotenv';
 import routes from './routes.js';
 import cron from 'node-cron';
-import {updateStatusAbsensi} from './controller.js';
+import {updateStatusAbsensi, updateStatusAbsensiPerbulan} from './controller.js';
 dotenv.config();
 
 const app = express();
@@ -23,12 +23,13 @@ app.use(session({
 
 app.use('/', routes);
 
-const jamUpdateAlpa = '09:47'; // HH:mm format
+const jamUpdateAlpa = '22:47'; // HH:mm format
 const [hour, minute] = jamUpdateAlpa.split(':');
 
 cron.schedule(`${minute} ${hour} * * *`, () => {
     console.log(`Running task at ${jamUpdateAlpa}`);
-    updateStatusAbsensi();
+    // updateStatusAbsensi();
+    updateStatusAbsensiPerbulan();
 
 });
 

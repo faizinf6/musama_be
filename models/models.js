@@ -166,7 +166,7 @@ const Absensi =sequelize.define('absensi',{
         allowNull: false
     },
     status_absensi:{
-      type:DataTypes.ENUM('HADIR','ALPA','SAKIT','IZIN'),
+      type:DataTypes.ENUM('HADIR','ALPA','SAKIT','IZIN','LIBUR'),
         allowNull: false
     },
     editor:{
