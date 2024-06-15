@@ -38,6 +38,11 @@ router.get('/all-kalenderlibur',Controller.findAllKalenderLibur)
 router.post('/create-kalenderlibur',Controller.createOneKalenderLibur)
 router.patch('/update-kalenderlibur/:id',Controller.updateOneKalenderLibur)
 
+router.get('/tahun-ajaran/:id',Controller.findOnetahunAjaranTabel)
+router.get('/all-tahun-ajaran',Controller.findAlltahunAjaranTabel)
+router.post('/create-tahun-ajaran',Controller.createOnetahunAjaranTabel)
+router.patch('/update-tahun-ajaran/:id',Controller.updateOnetahunAjaranTabel)
+
 
 
 

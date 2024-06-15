@@ -93,6 +93,28 @@ const kelasLembaga =sequelize.define('kelas_lembaga',{
 
 },{freezeTableName:true,timestamps:false});
 
+const tahunAjaranTabel =sequelize.define('tahun_ajaran',{
+    id:{
+        type:DataTypes.BIGINT.UNSIGNED,
+        autoIncrement:true,
+        primaryKey:true,
+        allowNull: false
+    },
+    nama_tahun:{
+        type:DataTypes.STRING,
+        allowNull: false
+    },
+    status:{
+        type:DataTypes.BOOLEAN,
+        allowNull: false
+    },
+    pemilik:{
+        type:DataTypes.STRING,
+        allowNull: false
+    }
+
+},{freezeTableName:true,timestamps:false});
+
 const  Kegiatan=sequelize.define('kegiatan',{
     id:{
         type:DataTypes.BIGINT.UNSIGNED,
@@ -278,7 +300,6 @@ async function syncModels() {
     try {
         // await sequelize.sync({force: true});
         await sequelize.sync();
-
         console.log("Semua model telah disinkronkan dengan database.");
     } catch (error) {
         console.error("Gagal menyinkronkan model dengan database: ", error);
@@ -286,4 +307,4 @@ async function syncModels() {
 }
 
 syncModels();
-export {Santri,kelasSantri,Kegiatan,Absensi,Admin,KalenderLibur,kelasLembaga}
+export {Santri,kelasSantri,Kegiatan,Absensi,Admin,KalenderLibur,kelasLembaga,tahunAjaranTabel}
