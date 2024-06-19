@@ -114,6 +114,35 @@ const tahunAjaranTabel =sequelize.define('tahun_ajaran',{
     }
 
 },{freezeTableName:true,timestamps:false});
+const FilterMesin =sequelize.define('filter_mesin',{
+    id:{
+        type:DataTypes.BIGINT.UNSIGNED,
+        autoIncrement:true,
+        primaryKey:true,
+        allowNull: false
+    },
+    id_kegiatan:{
+        type:DataTypes.BIGINT.UNSIGNED,
+        allowNull:false
+    },
+    id_mesin:{
+        type:DataTypes.STRING,
+        allowNull:false
+    },
+    is_laki:{
+        type:DataTypes.BOOLEAN,
+        allowNull:false
+    },
+    is_perempuan:{
+        type:DataTypes.BOOLEAN,
+        allowNull:false
+    },
+    kelas_terfilter: {
+        type:DataTypes.JSON,
+        allowNull:false
+    }
+
+},{freezeTableName:true,timestamps:false});
 
 const  Kegiatan=sequelize.define('kegiatan',{
     id:{
@@ -307,4 +336,4 @@ async function syncModels() {
 }
 
 syncModels();
-export {Santri,kelasSantri,Kegiatan,Absensi,Admin,KalenderLibur,kelasLembaga,tahunAjaranTabel}
+export {Santri,kelasSantri,Kegiatan,Absensi,Admin,KalenderLibur,kelasLembaga,tahunAjaranTabel,FilterMesin}

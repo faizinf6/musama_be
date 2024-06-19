@@ -1,4 +1,14 @@
-import {Absensi, Admin, KalenderLibur, Kegiatan, kelasLembaga, kelasSantri, Santri,tahunAjaranTabel} from "./models/models.js";
+import {
+    Absensi,
+    Admin,
+    FilterMesin,
+    KalenderLibur,
+    Kegiatan,
+    kelasLembaga,
+    kelasSantri,
+    Santri,
+    tahunAjaranTabel
+} from "./models/models.js";
 import {Op} from "sequelize";
 import moment from 'moment-timezone';
 
@@ -19,6 +29,17 @@ const keteranganKehadiranMap = {
     'null': '-'
 };
 
+const dayTranslations = {
+    Sunday: 'Ahad',
+    Monday: 'Senin',
+    Tuesday: 'Selasa',
+    Wednesday: 'Rabu',
+    Thursday: 'Kamis',
+    Friday: 'Jumat',
+    Saturday: 'Sabtu'
+};
+
+
 const getLembagaFlag = pemilikKelas => ({
     is_pondok: pemilikKelas === 'pondok',
     is_sdi: pemilikKelas === 'sdi',
@@ -28,18 +49,8 @@ const getLembagaFlag = pemilikKelas => ({
 });
 
 
-export async function updateStatusAbsensiPerbulan() {
-    const now = moment.tz('Asia/Jakarta').startOf('day');
-    const startDate = now.clone().startOf('month');
-
-    for (let i = 0; i < 30; i++) {
-        const currentDate = startDate.clone().add(i, 'days');
-        await updateStatusAbsensiPerhari(currentDate);
-    }
-}
-
-export async function updateStatusAbsensiPerhari(date) {
-    const hariIndonesia = ['ahad', 'senin', 'selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const updateStatusAbsensiPerhari = async (date) => {
+    const hariIndonesia = ['ahad', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
     const nama_hari_ini = hariIndonesia[date.day()].toLowerCase();
 
     const dateTimeWithTimezone = moment.tz(date, 'Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
@@ -47,36 +58,27 @@ export async function updateStatusAbsensiPerhari(date) {
     console.log("tanggalan");
     console.log(localDate);
 
-    const kalenderLiburPadaHariIni = await KalenderLibur.findOne({
-        where: {
-            sudah_terlewati: false,
-            tanggal: localDate
-        }
-    });
+    const [kalenderLiburPadaHariIni, daftarKegiatanAktif] = await Promise.all([
+        KalenderLibur.findOne({
+            where: {
+                sudah_terlewati: false,
+                tanggal: localDate
+            }
+        }),
+        Kegiatan.findAll({
+            where: {
+                status_kegiatan: true
+            }
+        })
+    ]);
 
-    const daftarKegiatanAktif = await Kegiatan.findAll({
-        where: {
-            status_kegiatan: true
-        }
-    });
+    const tasks = [];
 
     for (let kegiatanAktif of daftarKegiatanAktif) {
-        let statusAbsensi = '';
+        let statusAbsensi = kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini ? 'HADIR' : 'LIBUR';
 
-        if (kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini.toLowerCase()) {
-            console.log(kegiatanAktif.nama_kegiatan);
-            console.log("tidak libur perminggu");
-            statusAbsensi = 'ALPA';
-        } else {
-            console.log(kegiatanAktif.nama_kegiatan);
-            console.log("libur!");
+        if (kalenderLiburPadaHariIni && kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id)) {
             statusAbsensi = 'LIBUR';
-        }
-
-        if (kalenderLiburPadaHariIni) {
-            if (kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id)) {
-                statusAbsensi = 'LIBUR';
-            }
         }
 
         for (let kelas of kegiatanAktif.peserta) {
@@ -88,31 +90,47 @@ export async function updateStatusAbsensiPerhari(date) {
             });
 
             for (const peserta of pesertaKegiatan) {
-                const [absensi, created] = await Absensi.findOrCreate({
-                    where: {
-                        id_kegiatan: kegiatanAktif.id,
-                        nis_santri: peserta.nis_santri,
-                        tanggal: localDate
-                    },
-                    defaults: {
-                        editor: '0',
-                        status_absensi: statusAbsensi,
-                        last_edit: dateTimeWithTimezone
-                    }
-                });
-
-                if (!created) {
-                    await absensi.update({
-                        editor: '0',
-                        status_absensi: statusAbsensi,
-                        last_edit: dateTimeWithTimezone
+                tasks.push((async () => {
+                    const [absensi, created] = await Absensi.findOrCreate({
+                        where: {
+                            id_kegiatan: kegiatanAktif.id,
+                            nis_santri: peserta.nis_santri,
+                            tanggal: localDate
+                        },
+                        defaults: {
+                            editor: '0',
+                            status_absensi: statusAbsensi,
+                            last_edit: dateTimeWithTimezone
+                        }
                     });
-                }
+
+                    if (!created) {
+                        await absensi.update({
+                            editor: '0',
+                            status_absensi: statusAbsensi,
+                            last_edit: dateTimeWithTimezone
+                        });
+                    }
+                })());
             }
         }
     }
-}
 
+    await Promise.all(tasks);
+};
+
+export async function updateStatusAbsensiPerbulan() {
+    const now = moment.tz('Asia/Jakarta').startOf('day');
+    const startDate = now.clone().startOf('month');
+    const tasks = [];
+
+    for (let i = 0; i < 30; i++) {
+        const currentDate = startDate.clone().add(i, 'days');
+        tasks.push(updateStatusAbsensiPerhari(currentDate));
+    }
+
+    await Promise.all(tasks);
+}
 
 
 export async function updateStatusAbsensi() {
@@ -158,125 +176,131 @@ export async function updateStatusAbsensi() {
         }
 
 
-                for (let kelas of kegiatanAktif.peserta) {
-                    const pesertaKegiatan = await kelasSantri.findAll({
-                        where: {
-                            kelas: kelas.Kelas,
-                            tahun_ajaran: tahunAjaran[kegiatanAktif.pemilik]
-                        }
-                    });
-
-                    for (const peserta of pesertaKegiatan) {
-                        const [absensi, created] = await Absensi.findOrCreate({
-                            where: {
-                                id_kegiatan: kegiatanAktif.id,
-                                nis_santri: peserta.nis_santri,
-                                tanggal: localDate
-                            },
-                            defaults: {
-                                editor: '0',
-                                status_absensi: statusAbsensi,
-                                last_edit: dateTimeWithTimezone
-                            }
-                        });
-
-                        if (!created) {
-                            await absensi.update({
-                                editor: '0',
-                                status_absensi: statusAbsensi,
-                                last_edit: dateTimeWithTimezone
-                            });
-                        }
-                    }
+        for (let kelas of kegiatanAktif.peserta) {
+            const pesertaKegiatan = await kelasSantri.findAll({
+                where: {
+                    kelas: kelas.Kelas,
+                    tahun_ajaran: tahunAjaran[kegiatanAktif.pemilik]
                 }
+            });
+
+            for (const peserta of pesertaKegiatan) {
+                const [absensi, created] = await Absensi.findOrCreate({
+                    where: {
+                        id_kegiatan: kegiatanAktif.id,
+                        nis_santri: peserta.nis_santri,
+                        tanggal: localDate
+                    },
+                    defaults: {
+                        editor: '0',
+                        status_absensi: statusAbsensi,
+                        last_edit: dateTimeWithTimezone
+                    }
+                });
+
+                if (!created) {
+                    await absensi.update({
+                        editor: '0',
+                        status_absensi: statusAbsensi,
+                        last_edit: dateTimeWithTimezone
+                    });
+                }
+            }
+        }
 
     }
 }
 
 export class Controller {
 
-     static async rekapAbsensi (req, res) {
-         try {
-             const { id_kegiatan, nama_kelas,tanggal_mulai,tanggal_sampai, tahun_ajaran } = req.body;
-             const dataKegiatan = await  Kegiatan.findByPk(id_kegiatan)
-             // const tanggal_mulai ="01-06-2024"
-             // const  tanggal_sampai="30-06-2024"
-             console.log(req.body)
+    static async rekapAbsensi(req, res) {
+        try {
+            const { id_kegiatan, nama_kelas, tanggal_mulai, tanggal_sampai, tahun_ajaran } = req.body;
+            const dataKegiatan = await Kegiatan.findByPk(id_kegiatan);
+            console.log(req.body);
 
-             // Step 1: Collect all relevant students
-             const collectedStudents = await kelasSantri.findAll({
-                 where: {
-                     kelas: nama_kelas,
-                     pemilik: dataKegiatan.dataValues.pemilik,
-                     tahun_ajaran: tahun_ajaran
-                 }
-             });
+            // Step 1: Collect all relevant students
+            const collectedStudents = await kelasSantri.findAll({
+                where: {
+                    kelas: nama_kelas,
+                    pemilik: dataKegiatan.dataValues.pemilik,
+                    tahun_ajaran: tahun_ajaran
+                }
+            });
 
-             // Step 2: Initialize an empty array for the response
-             const response = [];
+            // Step 2: Initialize an empty array for the response
+            const response = [];
+            const nisSantriList = collectedStudents.map(student => student.nis_santri);
+            const startDate = moment(tanggal_mulai, 'DD-MM-YYYY');
+            const endDate = moment(tanggal_sampai, 'DD-MM-YYYY');
+            const dateRange = [];
 
-             // Step 3: Iterate over each student
-             for (const student of collectedStudents) {
-                 const nis_santri = student.nis_santri;
-                 const datSantri = await Santri.findByPk(nis_santri)
-                 const attendanceData = {};
-                 let totalHadir = 0;
-                 let totalAlpa = 0;
-                 let totalSakit = 0;
-                 let totalIzin = 0;
+            // Step 3: Generate date range
+            let currentDate = startDate.clone();
+            while (currentDate.isSameOrBefore(endDate)) {
+                dateRange.push(currentDate.format('YYYY-MM-DD'));
+                currentDate.add(1, 'days');
+            }
 
-                 // Step 4: Define the start and end dates
-                 let currentDate = moment(tanggal_mulai, 'DD-MM-YYYY');
-                 const endDate = moment(tanggal_sampai, 'DD-MM-YYYY');
-                 let dayCounter = 1;
+            // Step 4: Fetch all absensi records in one query
+            const absensiRecords = await Absensi.findAll({
+                where: {
+                    nis_santri: nisSantriList,
+                    id_kegiatan: id_kegiatan,
+                    tanggal: dateRange
+                }
+            });
 
-                 // Step 5: Loop through each day in the date range
-                 while (currentDate.isSameOrBefore(endDate)) {
-                     const absensi = await Absensi.findOne({
-                         where: {
-                             nis_santri: nis_santri,
-                             id_kegiatan: id_kegiatan,
-                             tanggal: currentDate.format('YYYY-MM-DD')
-                         }
-                     });
+            // Step 5: Organize absensi records by student and date
+            const absensiMap = {};
+            absensiRecords.forEach(record => {
+                if (!absensiMap[record.nis_santri]) {
+                    absensiMap[record.nis_santri] = {};
+                }
+                absensiMap[record.nis_santri][record.tanggal] = record.status_absensi;
+            });
 
-                     // Step 6: Record attendance status or mark it as "-"
-                     if (absensi) {
-                         attendanceData[`day${dayCounter}`] = absensi.status_absensi;
+            // Step 6: Process each student in parallel
+            await Promise.all(collectedStudents.map(async student => {
+                const nis_santri = student.nis_santri;
+                const datSantri = await Santri.findByPk(nis_santri);
+                const attendanceData = {};
+                let totalHadir = 0;
+                let totalAlpa = 0;
+                let totalSakit = 0;
+                let totalIzin = 0;
 
-                         // Increment the corresponding counter
-                         if (absensi.status_absensi === 'HADIR') {
-                             totalHadir++;
-                         } else if (absensi.status_absensi === 'ALPA') {
-                             totalAlpa++;
-                         } else if (absensi.status_absensi === 'SAKIT') {
-                             totalSakit++;
-                         } else if (absensi.status_absensi === 'IZIN') {
-                             totalIzin++;
-                         }
-                     } else {
-                         attendanceData[`day${dayCounter}`] = "-";
-                     }
+                dateRange.forEach((date, index) => {
+                    const dayCounter = index + 1;
+                    const status = absensiMap[nis_santri] ? absensiMap[nis_santri][date] : "-";
+                    attendanceData[`day${dayCounter}`] = status;
 
-                     // Step 7: Move to the next day
-                     currentDate = currentDate.add(1, 'days');
-                     dayCounter++;
-                 }
+                    // Increment the corresponding counter
+                    if (status === 'HADIR') {
+                        totalHadir++;
+                    } else if (status === 'ALPA') {
+                        totalAlpa++;
+                    } else if (status === 'SAKIT') {
+                        totalSakit++;
+                    } else if (status === 'IZIN') {
+                        totalIzin++;
+                    }
+                });
 
-                 // Step 8: Add the student's data to the response array
-                 response.push({
-                     santri: datSantri.dataValues,
-                     attendance_data: attendanceData,
-                     totalHadir: totalHadir,
-                     totalAlpa: totalAlpa,
-                     totalSakit: totalSakit,
-                     totalIzin: totalIzin
-                 });
-             }
+                // Step 7: Add the student's data to the response array
+                response.push({
+                    santri: datSantri.dataValues,
+                    attendance_data: attendanceData,
+                    totalHadir: totalHadir,
+                    totalAlpa: totalAlpa,
+                    totalSakit: totalSakit,
+                    totalIzin: totalIzin
+                });
+            }));
 
-             // Step 9: Send the response as JSON
-             res.json(response);
-         } catch (error) {
+            // Step 8: Send the response as JSON
+            res.json(response);
+        } catch (error) {
             console.error(error);
             res.status(500).json({ error: 'Internal Server Error' });
         }
@@ -590,11 +614,46 @@ export class Controller {
 
 
     static async createOneKegiatan (req, res){
+        const kegiatanData = req.body;
+
         try {
-            const kelas = await Kegiatan.create(  req.body );
-            res.status(201).json(kelas);
+            // Create a new Kegiatan record
+            const createdKegiatan = await Kegiatan.create({
+                status_kegiatan: kegiatanData.status_kegiatan,
+                bisa_terlambat: kegiatanData.bisa_terlambat,
+                nama_kegiatan: kegiatanData.nama_kegiatan,
+                pemilik: kegiatanData.pemilik,
+                jam_mulai: kegiatanData.jam_mulai,
+                jam_terlambat: kegiatanData.jam_terlambat,
+                jam_selesai: kegiatanData.jam_selesai,
+                libur_perminggu: kegiatanData.libur_perminggu,
+                daftar_mesin: kegiatanData.daftar_mesin,
+                peserta: kegiatanData.peserta
+            });
+
+            // Add "aktif" attribute to each peserta in kelas_terfilter
+            const pesertaWithAktif = kegiatanData.peserta.map(peserta => ({
+                ...peserta,
+                aktif: true
+            }));
+
+            // Create records in FilterMesin for each mesin
+            const mesinPromises = kegiatanData.daftar_mesin.map(async (mesin) => {
+                return await FilterMesin.create({
+                    id_kegiatan: createdKegiatan.id,
+                    id_mesin: mesin.id_mesin,
+                    is_laki: true,
+                    is_perempuan: true,
+                    kelas_terfilter: pesertaWithAktif
+                });
+            });
+
+            await Promise.all(mesinPromises);
+
+            res.status(201).json({ createdKegiatan });
         } catch (error) {
-            res.status(400).json({ error: error.message });
+            console.error(error);
+            res.status(500).json({ error: 'An error occurred while creating the records.' });
         }
     }
 
@@ -627,6 +686,132 @@ export class Controller {
             res.status(201).json(kelas);
         } catch (error) {
             res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async createOneFilterMesin (req, res){
+        try {
+            const kelas = await FilterMesin.create(  req.body );
+            res.status(201).json(kelas);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async findOneFilter (req, res){
+        try {
+            const kelas = await FilterMesin.findByPk(  req.params.id );
+            res.status(201).json(kelas);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async findAllFilterMesin(req, res) {
+        try {
+            // Fetch all FilterMesin records
+            const filterMesinRecords = await FilterMesin.findAll();
+
+            // Initialize an array to hold the results
+            const results = [];
+
+            // Iterate over each FilterMesin record
+            for (const filterMesin of filterMesinRecords) {
+                // Fetch the related Kegiatan record
+                const kegiatan = await Kegiatan.findOne({ where: { id: filterMesin.id_kegiatan } });
+
+                // Fetch the related Admin record
+                const admin = await Admin.findOne({ where: { nis: filterMesin.id_mesin } });
+
+                // If both related records are found, include them in the result
+                if (kegiatan && admin) {
+                    results.push({
+                        dataMesin:{
+                            filterMesinData:filterMesin,
+                            kegiatanData:kegiatan,
+                            adminData:admin,
+                        }
+                    });
+                }
+            }
+
+            // Send the aggregated data to the client
+            res.json(results);
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ error: 'An error occurred while fetching data.' });
+        }
+
+
+
+
+    }
+
+    static async updateOneFilterMesin (req, res){
+        try {
+            const { id_kegiatan,id_mesin, is_laki, is_perempuan } = req.body;
+
+            const kelas = await FilterMesin.update(  req.body ,{
+                where:{
+                    id_kegiatan:id_kegiatan,
+                    id_mesin:id_mesin,
+                }
+            });
+
+            res.status(201).json(kelas);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async updateStatusCctv (req, res){
+        const { id_mesin, cctv } = req.body;
+
+        console.log('Received request to update atribut_mesin:', req.body);
+
+        try {
+            // Find the admin with the specific id_mesin
+            const admin = await Admin.findOne({ where: { nis: id_mesin } });
+
+            if (!admin) {
+                console.log('Admin not found for id_mesin:', id_mesin);
+                return res.status(404).json({ message: 'Admin not found' });
+            }
+
+            // Parse the atribut_mesin JSON
+            let atribut_mesin = admin.atribut_mesin;
+
+            if (!Array.isArray(atribut_mesin)) {
+                atribut_mesin = [];
+            }
+
+            console.log('Current atribut_mesin:', atribut_mesin);
+
+            // Update the specific cctv value
+            atribut_mesin = atribut_mesin.map(item => {
+                if (item.cctv) {
+                    item.cctv = { ...item.cctv, ...cctv };
+                }
+                return item;
+            });
+
+            console.log('Updated atribut_mesin:', atribut_mesin);
+
+            // Save the updated atribut_mesin back to the admin
+            await Admin.update(
+                { atribut_mesin },
+                { where: { nis: id_mesin } }
+            );
+
+            // Fetch the admin again to confirm the update
+            const updatedAdmin = await Admin.findOne({ where: { nis: id_mesin } });
+            const updatedAdminJSON = JSON.stringify(updatedAdmin.dataValues, null, 2);
+            // console.log('Admin updated successfully:', updatedAdminJSON);
+
+            res.status(200).json({ message: 'Atribut mesin updated successfully', admin: updatedAdmin });
+        } catch (error) {
+            console.error('Error updating atribut_mesin:', error);
+            res.status(500).json({ message: 'An error occurred while updating atribut_mesin' });
         }
     }
 
@@ -704,7 +889,7 @@ export class Controller {
 
     static async createOneAdmin(req, res){
         try {
-           // const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
+            // const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
             const santri = await Admin.create(req.body);
             res.status(201).json(santri);
         } catch (error) {
@@ -713,7 +898,7 @@ export class Controller {
     }
     static async createManyAdmin(req, res){
         try {
-           // const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
+            // const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
             console.log("babi")
             const santri = await Admin.bulkCreate(req.body,{validate:true});
             res.status(201).json(santri);
@@ -1062,6 +1247,78 @@ export class Controller {
             res.status(500).send('Error retrieving data');
         }
     }
+
+
+    static async getKegiatanMesin (req, res){
+        try {
+            const todayEnglish = moment().format('dddd'); // Get current day in English
+            const today = dayTranslations[todayEnglish]; // Translate to Indonesian
+            const currentDate = moment().format('YYYY-MM-DD'); // Get current date in YYYY-MM-DD format
+            const id_mesin = req.params.id;
+
+            // Step 1: Find all Kegiatan with status_kegiatan = true and libur_perminggu not equal to today
+            const kegiatans = await Kegiatan.findAll({
+                where: {
+                    status_kegiatan: true,
+                    libur_perminggu: { [Op.ne]: today }
+                }
+            });
+
+            // Step 2: Find all KalenderLibur with tanggal equal to current date
+            const kalenderLiburs = await KalenderLibur.findAll({
+                where: {
+                    tanggal: currentDate
+                }
+            });
+
+            // Step 3: Filter Kegiatan based on KalenderLibur
+            const collectedKegiatans = kegiatans.filter(kegiatan => {
+                const isHoliday = kalenderLiburs.some(kalender =>
+                    kalender.id_kegiatan_terimbas && kalender.id_kegiatan_terimbas.includes(kegiatan.id)
+                );
+                return !isHoliday;
+            });
+
+            // Step 4: Find matching Kegiatan based on id_mesin in daftar_mesin
+            const mesinOnKegiatans = collectedKegiatans.filter(kegiatan => {
+                return kegiatan.daftar_mesin && kegiatan.daftar_mesin.some(mesin => mesin.id_mesin === id_mesin);
+            });
+
+            // Step 5: Find all FilterMesin where id_mesin matches and id_kegiatan matches and merge data
+            const matched = await Promise.all(mesinOnKegiatans.map(async kegiatan => {
+                const filterMesins = await FilterMesin.findAll({
+                    where: {
+                        id_mesin: id_mesin,
+                        id_kegiatan: kegiatan.id
+                    }
+                });
+                if (filterMesins.length > 0) {
+                    return {
+                        id_kegiatan: kegiatan.id,
+                        id_mesin:filterMesins[0].id_mesin,
+                        pemilik:kegiatan.pemilik,
+                        nama_kegiatan: kegiatan.nama_kegiatan,
+                        jam_mulai:kegiatan.jam_mulai,
+                        jam_selesai:kegiatan.jam_selesai,
+                        bisa_terlambat:kegiatan.bisa_terlambat,
+                        jam_terlambat:kegiatan.jam_terlambat,
+                        is_laki:filterMesins[0].is_laki,
+                        is_perempuan:filterMesins[0].is_perempuan,
+                        kelas_terfilter:filterMesins[0].kelas_terfilter
+
+                    };
+                }
+                return null;
+            }));
+
+            // Step 6: Send back the result to client
+            res.json(matched.filter(Boolean)); // Filter out null values
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+
 
 
 

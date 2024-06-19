@@ -19,6 +19,14 @@ router.get('/all-kegiatan',Controller.findAllKegiatan)
 router.post('/create-kegiatan',Controller.createOneKegiatan)
 router.patch('/update-kegiatan',Controller.updateOneKegiatan)
 
+router.get('/get-mesin-kegiatan/:id',Controller.getKegiatanMesin)
+
+
+router.get('/filter-mesin/:id',Controller.findOneFilter)
+router.get('/all-filter-mesin',Controller.findAllFilterMesin)
+router.post('/create-filter-mesin',Controller.createOneFilterMesin)
+router.patch('/update-filter-mesin',Controller.updateOneFilterMesin)
+
 router.get('/absensi/:id',Controller.findOneAbsensi)
 router.get('/all-absensi',Controller.findAllAbsensi)
 router.post('/create-absensi',Controller.createOneAbsensi)
@@ -42,6 +50,7 @@ router.get('/tahun-ajaran/:id',Controller.findOnetahunAjaranTabel)
 router.get('/all-tahun-ajaran',Controller.findAlltahunAjaranTabel)
 router.post('/create-tahun-ajaran',Controller.createOnetahunAjaranTabel)
 router.patch('/update-tahun-ajaran/:id',Controller.updateOnetahunAjaranTabel)
+router.patch('/update-status-cctv',Controller.updateStatusCctv)
 
 
 
