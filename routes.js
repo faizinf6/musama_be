@@ -20,6 +20,7 @@ router.post('/create-kegiatan',Controller.createOneKegiatan)
 router.patch('/update-kegiatan',Controller.updateOneKegiatan)
 
 router.get('/get-mesin-kegiatan/:id',Controller.getKegiatanMesin)
+router.get('/get-dbsantri/:pemilik',Controller.getDbSantri)
 
 
 router.get('/filter-mesin/:id',Controller.findOneFilter)
@@ -51,6 +52,7 @@ router.get('/all-tahun-ajaran',Controller.findAlltahunAjaranTabel)
 router.post('/create-tahun-ajaran',Controller.createOnetahunAjaranTabel)
 router.patch('/update-tahun-ajaran/:id',Controller.updateOnetahunAjaranTabel)
 router.patch('/update-status-cctv',Controller.updateStatusCctv)
+router.patch('/update-status-main',Controller.updateStatusMain)
 
 
 

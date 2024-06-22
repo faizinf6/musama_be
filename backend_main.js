@@ -23,7 +23,7 @@ app.use(session({
 
 app.use('/', routes);
 
-const jamUpdateAlpa = '9:12'; // HH:mm format
+const jamUpdateAlpa = '14:9'; // HH:mm format
 const [hour, minute] = jamUpdateAlpa.split(':');
 
 cron.schedule(`${minute} ${hour} * * *`, () => {

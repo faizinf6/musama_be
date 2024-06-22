@@ -75,7 +75,7 @@ const updateStatusAbsensiPerhari = async (date) => {
     const tasks = [];
 
     for (let kegiatanAktif of daftarKegiatanAktif) {
-        let statusAbsensi = kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini ? 'HADIR' : 'LIBUR';
+        let statusAbsensi = kegiatanAktif.libur_perminggu.toLowerCase() !== nama_hari_ini ? 'ALPA' : 'LIBUR';
 
         if (kalenderLiburPadaHariIni && kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id)) {
             statusAbsensi = 'LIBUR';
@@ -814,6 +814,56 @@ export class Controller {
             res.status(500).json({ message: 'An error occurred while updating atribut_mesin' });
         }
     }
+static async updateStatusMain (req, res){
+        const { id_mesin, musama_main } = req.body;
+
+        console.log('Received request to update atribut_mesin:', req.body);
+
+        try {
+            // Find the admin with the specific id_mesin
+            const admin = await Admin.findOne({ where: { nis: id_mesin } });
+
+            if (!admin) {
+                console.log('Admin not found for id_mesin:', id_mesin);
+                return res.status(404).json({ message: 'Admin not found' });
+            }
+
+            // Parse the atribut_mesin JSON
+            let atribut_mesin = admin.atribut_mesin;
+
+            if (!Array.isArray(atribut_mesin)) {
+                atribut_mesin = [];
+            }
+
+            console.log('Current atribut_mesin:', atribut_mesin);
+
+            // Update the specific cctv value
+            atribut_mesin = atribut_mesin.map(item => {
+                if (item.musama_main) {
+                    item.musama_main = { ...item.musama_main, ...musama_main };
+                }
+                return item;
+            });
+
+            console.log('Updated atribut_mesin:', atribut_mesin);
+
+            // Save the updated atribut_mesin back to the admin
+            await Admin.update(
+                { atribut_mesin },
+                { where: { nis: id_mesin } }
+            );
+
+            // Fetch the admin again to confirm the update
+            const updatedAdmin = await Admin.findOne({ where: { nis: id_mesin } });
+            const updatedAdminJSON = JSON.stringify(updatedAdmin.dataValues, null, 2);
+            // console.log('Admin updated successfully:', updatedAdminJSON);
+
+            res.status(200).json({ message: 'Atribut mesin updated successfully', admin: updatedAdmin });
+        } catch (error) {
+            console.error('Error updating atribut_mesin:', error);
+            res.status(500).json({ message: 'An error occurred while updating atribut_mesin' });
+        }
+    }
 
 
     static async createOneAbsensi (req, res){
@@ -1316,6 +1366,51 @@ export class Controller {
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
+    }
+
+
+    static async getDbSantri (req, res){
+        try {
+                // Extract the 'pemilik' parameter from the request
+                const owner = req.params.pemilik;
+
+                // Validate that 'pemilik' is provided
+                if (!owner) {
+                    return res.status(400).json({ error: 'Pemilik parameter is required' });
+                }
+
+                // Query the kelasSantri model to find all entries where pemilik matches the owner
+                const collectedKelasSantris = await kelasSantri.findAll({
+                    where: {
+                        pemilik: owner
+                    }
+                });
+
+                // Map each collectedKelasSantris to find corresponding Santri data
+                const santriData = await Promise.all(collectedKelasSantris.map(async (santriKelas) => {
+                    const santri = await Santri.findOne({
+                        where: {
+                            nis: santriKelas.nis_santri
+                        }
+                    });
+
+                    // Construct the response object
+                    return {
+                        nis_santri: santriKelas.nis_santri,
+                        nama_santri: santri ? santri.nama_santri : null,
+                        gender: santri ? santri.gender : null,
+                        rfid: santri ? santri.rfid : null,
+                        kelas: santriKelas.kelas
+                    };
+                }));
+
+                // Send the results back as a response
+                res.status(200).json(santriData);
+            } catch (error) {
+                // Handle any errors that occur during the process
+                console.error('Error fetching santri data:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
     }
 
 
