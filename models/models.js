@@ -294,22 +294,27 @@ const  Admin=sequelize.define('admin',{
     },
     is_pondok:{
         type:DataTypes.BOOLEAN,
+        defaultValue:false,
         allowNull:false
     },
     is_sdi:{
         type:DataTypes.BOOLEAN,
+        defaultValue:false,
         allowNull:false
     },
     is_mts:{
         type:DataTypes.BOOLEAN,
+        defaultValue:false,
         allowNull:false
     },
     is_ma:{
         type:DataTypes.BOOLEAN,
+        defaultValue:false,
         allowNull:false
     },
     is_madin:{
         type:DataTypes.BOOLEAN,
+        defaultValue:false,
         allowNull:false
     },
     atribut_mesin:{

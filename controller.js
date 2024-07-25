@@ -9,13 +9,14 @@ import {
     Santri,
     tahunAjaranTabel
 } from "./models/models.js";
-import {Op} from "sequelize";
+import {Op, Sequelize} from "sequelize";
 import moment from 'moment-timezone';
+import sequelize from "./config_db/Database.js";
 
 
 const tahunAjaran = {
     'SDI': '2023-2024',
-    'Mts': '2023-2024',
+    'Mts': '2024-2025',
     'MA': '2023-2024',
     'Madin': '1445-1446',
     'Pondok': '1445-1446'
@@ -133,15 +134,14 @@ export async function updateStatusAbsensiPerbulan() {
 }
 
 
-export async function updateStatusAbsensi() {
+export const  updateStatusAbsensi = async () =>  {
     const hariIndonesia = ['ahad', 'senin', 'selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const today = new Date();
     const nama_hari_ini = hariIndonesia[today.getDay()].toLowerCase();
 
     const dateTimeWithTimezone = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
     const localDate = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD');
-    console.log("tanggalan")
-    console.log(localDate)
+
 
     const kalenderLiburPadaHariIni = await KalenderLibur.findOne({
         where:{
@@ -155,6 +155,7 @@ export async function updateStatusAbsensi() {
             status_kegiatan: true
         }
     });
+
 
     for (let kegiatanAktif of daftarKegiatanAktif) {
         let statusAbsensi = ''
@@ -184,6 +185,7 @@ export async function updateStatusAbsensi() {
                 }
             });
 
+
             for (const peserta of pesertaKegiatan) {
                 const [absensi, created] = await Absensi.findOrCreate({
                     where: {
@@ -211,6 +213,55 @@ export async function updateStatusAbsensi() {
     }
 }
 
+export const updateAdminsHoliday = async () =>  {
+    try {
+        const today = moment().format('YYYY-MM-DD');
+        const dayName = dayTranslations[moment().format('dddd')];
+        console.log(`Today's date: ${today}`);
+        console.log(`Today's day name in Indonesian: ${dayName}`);
+
+        // Get all Admins where is_mts is true
+        const admins = await Admin.findAll({
+            where: { is_mts: true }
+        });
+        console.log(`Number of admins with is_mts=true: ${admins.length}`);
+
+        for (const admin of admins) {
+            const jadwalMasuk = admin.atribut_mesin.jadwal_masuk;
+            const isWorkingDay = jadwalMasuk[dayName.toLowerCase()];
+            const statusAbsensi = isWorkingDay ? 'ALPA' : 'LIBUR';
+
+            console.log(`Processing admin with NIS: ${admin.nis}`);
+            console.log(`Processing admin with NIS: ${admin.nama_admin}`);
+            console.log(`jadwal_masuk for today (${dayName}): ${isWorkingDay}`);
+            console.log(`Setting status_absensi to: ${statusAbsensi}`);
+
+            // Update the Absensi model
+            const [affectedRows] = await Absensi.update(
+                { status_absensi: statusAbsensi },
+                {
+                    where: {
+                        id_kegiatan: 3,
+                        nis_santri: admin.nis,
+                        tanggal: today
+                    }
+                }
+            );
+
+            if (affectedRows > 0) {
+                console.log(`Updated ${affectedRows} rows for admin NIS: ${admin.nis}`);
+            } else {
+                console.log(`No rows updated for admin NIS: ${admin.nis}`);
+            }
+        }
+
+        console.log('Finished updating Admins holiday.');
+    } catch (error) {
+        console.error('Error updating Admins holiday:', error);
+    }
+}
+
+
 export class Controller {
 
     static async rekapAbsensi(req, res) {
@@ -219,14 +270,26 @@ export class Controller {
             const dataKegiatan = await Kegiatan.findByPk(id_kegiatan);
             console.log(req.body);
 
+
+            let collectedStudents;
+            if (nama_kelas==="semua"){
             // Step 1: Collect all relevant students
-            const collectedStudents = await kelasSantri.findAll({
+
+            collectedStudents = await kelasSantri.findAll({
                 where: {
-                    kelas: nama_kelas,
                     pemilik: dataKegiatan.dataValues.pemilik,
                     tahun_ajaran: tahun_ajaran
                 }
-            });
+            });} else {
+                collectedStudents = await kelasSantri.findAll({
+                    where: {
+                        kelas: nama_kelas,
+                        pemilik: dataKegiatan.dataValues.pemilik,
+                        tahun_ajaran: tahun_ajaran
+                    }
+                });
+            }
+
 
             // Step 2: Initialize an empty array for the response
             const response = [];
@@ -253,11 +316,14 @@ export class Controller {
 
             // Step 5: Organize absensi records by student and date
             const absensiMap = {};
+            const absensiMapTime = {};
             absensiRecords.forEach(record => {
                 if (!absensiMap[record.nis_santri]) {
                     absensiMap[record.nis_santri] = {};
+                    absensiMapTime[record.nis_santri] = {};
                 }
                 absensiMap[record.nis_santri][record.tanggal] = record.status_absensi;
+                absensiMapTime[record.nis_santri][record.tanggal] = record.last_edit;
             });
 
             // Step 6: Process each student in parallel
@@ -265,15 +331,20 @@ export class Controller {
                 const nis_santri = student.nis_santri;
                 const datSantri = await Santri.findByPk(nis_santri);
                 const attendanceData = {};
+                const attendanceDataTime = {};
                 let totalHadir = 0;
                 let totalAlpa = 0;
                 let totalSakit = 0;
                 let totalIzin = 0;
+                let kelasSantri = student.kelas;
 
                 dateRange.forEach((date, index) => {
                     const dayCounter = index + 1;
                     const status = absensiMap[nis_santri] ? absensiMap[nis_santri][date] : "-";
+                    const absenTime = absensiMapTime[nis_santri] ? absensiMapTime[nis_santri][date] : "-";
+
                     attendanceData[`day${dayCounter}`] = status;
+                    attendanceDataTime[`day${dayCounter}`] = absenTime;
 
                     // Increment the corresponding counter
                     if (status === 'HADIR') {
@@ -291,10 +362,12 @@ export class Controller {
                 response.push({
                     santri: datSantri.dataValues,
                     attendance_data: attendanceData,
+                    attendance_data_time: attendanceDataTime,
                     totalHadir: totalHadir,
                     totalAlpa: totalAlpa,
                     totalSakit: totalSakit,
-                    totalIzin: totalIzin
+                    totalIzin: totalIzin,
+                    kelasSantri:kelasSantri
                 });
             }));
 
@@ -603,13 +676,93 @@ export class Controller {
     static async updateOneKelas (req, res){
         try {
             const kelas = await kelasSantri.update(  req.body ,{
-                where:{id:req.params.id}
+                where:{nis_santri:req.params.nis}
             });
             res.status(201).json(kelas);
         } catch (error) {
             res.status(400).json({ error: error.message });
         }
     }
+
+    // Delete controller with multiple "where" conditions
+    static async deleteOneKelas(req, res) {
+        try {
+            const {nis_santri,kelas,pemilik,tahun_ajaran} = req.body; // Assume req.body contains the where conditions
+            const result = await kelasSantri.destroy({
+                where: {
+                    nis_santri:nis_santri,
+                    kelas:kelas,
+                    pemilik:pemilik,
+                    tahun_ajaran:tahun_ajaran
+
+                }
+            });
+            if (result) {
+                res.status(200).json({ message: 'Record deleted successfully' });
+            } else {
+                res.status(404).json({ error: 'Record not found' });
+            }
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async  findDuplicatesKelasSantri  (req, res)  {
+        const { nis_santri, pemilik, tahun_ajaran } = req.body;
+
+        try {
+            // Step 1: Find duplicate groups
+            const duplicateGroups = await kelasSantri.findAll({
+                attributes: [
+                    'nis_santri',
+                    'pemilik',
+                    'tahun_ajaran',
+                    [Sequelize.fn('COUNT', Sequelize.col('nis_santri')), 'count']
+                ],
+                where: {
+                    pemilik: pemilik,
+                    tahun_ajaran: tahun_ajaran
+                },
+                group: ['nis_santri', 'pemilik', 'tahun_ajaran'],
+                having: Sequelize.literal('count > 1')
+            });
+
+            if (duplicateGroups.length > 0) {
+                // Step 2: Collect the conditions to find all duplicate records
+                const conditions = duplicateGroups.map(group => ({
+                    nis_santri: group.nis_santri,
+                    pemilik: group.pemilik,
+                    tahun_ajaran: group.tahun_ajaran
+                }));
+
+                // Step 3: Query all records that belong to the duplicate groups
+                const duplicates = await kelasSantri.findAll({
+                    where: {
+                        [Op.or]: conditions
+                    }
+                });
+
+                res.status(200).json({
+                    message: 'Duplicate records found',
+                    duplicates: duplicates
+                });
+            } else {
+                res.status(200).json({
+                    message: 'No duplicate records found'
+                });
+            }
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({
+                message: 'An error occurred while searching for duplicates',
+                error: error.message
+            });
+        }
+
+
+
+
+    };
 
 
 
@@ -764,6 +917,24 @@ export class Controller {
         }
     }
 
+    static async deleteOneFilter(req, res) {
+        try {
+            const {id_filter} = req.body; // Assume req.body contains the where conditions
+            const result = await kelasSantri.destroy({
+                where: {
+                    id:id_filter
+                }
+            });
+            if (result) {
+                res.status(200).json({ message: 'Record deleted successfully' });
+            } else {
+                res.status(404).json({ error: 'Record not found' });
+            }
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
     static async updateStatusCctv (req, res){
         const { id_mesin, cctv } = req.body;
 
@@ -906,29 +1077,18 @@ static async updateStatusMain (req, res){
         }
     }
 
-    static async updateOneAbsensi (req, res){
+    static async updateOneAbsensi(req, res) {
         try {
-            const {id_kegiatan,nis_santri,tanggal}=req.body
-            const now = new Date();
-            const dateTimeWithTimezone = now.toLocaleString('id-ID', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-                timeZone: 'Asia/Jakarta' // Replace with your desired timezone
-            });
+            const { id_kegiatan, nis_santri, tanggal } = req.body;
+            const now = moment().tz('Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
 
             // Add dateTimeWithTimezone to the request body
-            req.body.last_edit = dateTimeWithTimezone;
-            const absen = await Absensi.update(  req.body ,{
-                where:{
-                    id_kegiatan:id_kegiatan,
-                    nis_santri:nis_santri,
-                    tanggal:tanggal,
-
+            req.body.last_edit = now;
+            const absen = await Absensi.update(req.body, {
+                where: {
+                    id_kegiatan: id_kegiatan,
+                    nis_santri: nis_santri,
+                    tanggal: tanggal,
                 }
             });
             res.status(201).json(absen);
@@ -936,7 +1096,6 @@ static async updateStatusMain (req, res){
             res.status(400).json({ error: error.message });
         }
     }
-
     static async createOneAdmin(req, res){
         try {
             // const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
@@ -946,14 +1105,32 @@ static async updateStatusMain (req, res){
             res.status(400).json({ error: error.message });
         }
     }
-    static async createManyAdmin(req, res){
+    static async createManyAdmin(req, res) {
         try {
-            // const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
-            console.log("babi")
-            const santri = await Admin.bulkCreate(req.body,{validate:true});
+            console.log("Request body:", JSON.stringify(req.body, null, 2));
+            console.log("Starting createManyAdmin function");
+
+            const santri = await Admin.bulkCreate(req.body, {
+                validate: true,
+                logging: console.log // This will log the SQL queries
+            });
+
+            console.log("bulkCreate operation completed");
+            console.log("Created admins:", JSON.stringify(santri, null, 2));
+
             res.status(201).json(santri);
         } catch (error) {
-            res.status(400).json({ error: error.message });
+            console.error("Error in createManyAdmin:");
+            console.error(error);
+
+            if (error instanceof Sequelize.ValidationError) {
+                console.error("Validation error details:", error.errors);
+            }
+
+            res.status(400).json({
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            });
         }
     }
 
@@ -982,8 +1159,25 @@ static async updateStatusMain (req, res){
     }
     static async findOneAdmin(req, res){
         try {
-            const { nis,rfid, nama_santri,gender, is_pondok, is_sdi,is_mts,is_ma,is_madin } = req.body;
+
             const santri = await Admin.findByPk(req.params.nis)
+            res.status(201).json(santri);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async findAdminPerlembaga(req, res) {
+        try {
+            const lembaga = req.params.lembaga;
+            const condition = `is_${lembaga}`;
+            const whereClause = {};
+            whereClause[condition] = true;
+
+            const santri = await Admin.findAll({
+                where: whereClause
+            });
+
             res.status(201).json(santri);
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -991,7 +1185,6 @@ static async updateStatusMain (req, res){
     }
     static async updateOneAdmin(req, res){
         try {
-
             const updated = await Admin.update(req.body, {
                 where: { nis: req.body.nis }
             });
@@ -1001,6 +1194,42 @@ static async updateStatusMain (req, res){
                 res.status(404).send('Admin not found');
             }
         } catch (error) {
+            res.status(500).send(error.message);
+        }
+    }
+
+    static async updateManyAdmins(req, res) {
+        const records = req.body; // Expecting an array of records
+
+        if (!Array.isArray(records) || records.length === 0) {
+            return res.status(400).send('Invalid input');
+        }
+
+        const transaction = await sequelize.transaction();
+
+        try {
+            let atLeastOneUpdated = false;
+
+            for (const record of records) {
+                const [updated] = await Admin.update(record, {
+                    where: { nis: record.nis },
+                    transaction
+                });
+
+                if (updated > 0) {
+                    atLeastOneUpdated = true;
+                }
+            }
+
+            if (atLeastOneUpdated) {
+                await transaction.commit();
+                res.status(200).send('All valid records updated successfully');
+            } else {
+                await transaction.rollback();
+                res.status(404).send('No records were updated');
+            }
+        } catch (error) {
+            await transaction.rollback();
             res.status(500).send(error.message);
         }
     }
