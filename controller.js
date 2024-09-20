@@ -30,6 +30,43 @@ const keteranganKehadiranMap = {
     'null': '-'
 };
 
+const idKelasMadinku = {
+    "4 ibt Pa Pagi":         "1000",
+        "5 ibt Pa Pagi":"2000",
+"6 ibt Pa Pagi":"3000",
+"1 Tsn Pa Pagi":"4000",
+"2 Tsn Pa Pagi":"5000",
+"3 Tsn Pa Pagi":"6000",
+"1 Aly Pa Pagi":"7000",
+"2 Aly Pa Pagi":"8000",
+"2 Aly Pi Pagi":"8500",
+"4 A Ibt Pa Siang":"1101",
+"4 B Ibt Pa Siang":"1102",
+"5 A Ibt Pa Siang":"2101",
+"5 B Ibt Pa Siang":"2102",
+"6 A Ibt Pa Siang":"3101",
+"6 B Ibt Pa Siang":"3102",
+"1 Tsn Pa Siang":"4100",
+"2 Tsn Pa Siang":"5100",
+"4 Ibt Pi Pagi":"1500",
+"5 Ibt Pi Pagi":"2500",
+"6 Ibt Pi Pagi":"3500",
+"3 Tsn Pa Siang":"6100",
+"1 Tsn Pi Pagi":"4500",
+"2 Tsn Pi Pagi":"5500",
+"3 Tsn Pi Pagi":"6500",
+"1 Aly Pi Pagi":"7500",
+"4 A Ibt Pi Siang":"1601",
+"4 B Ibt Pi Siang":"1602",
+"5 A Ibt Pi Siang":"2601",
+"5 B Ibt Pi Siang":"2602",
+"6 A Ibt Pi Siang":"3601",
+"6 B Ibt Pi Siang":"3602",
+"1 A Tsn Pi Siang":"4601",
+"1 B Tsn Pi Siang":"4602",
+"2 Tsn Pi Siang":"5600",
+"3 Tsn Pi Siang":"6600"
+};
 const dayTranslations = {
     Sunday: 'Ahad',
     Monday: 'Senin',
@@ -134,7 +171,7 @@ export async function updateStatusAbsensiPerbulan() {
 }
 
 
-export const  updateStatusAbsensi = async () =>  {
+export const updateStatusAbsensi = async () => {
     const hariIndonesia = ['ahad', 'senin', 'selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const today = new Date();
     const nama_hari_ini = hariIndonesia[today.getDay()].toLowerCase();
@@ -142,20 +179,20 @@ export const  updateStatusAbsensi = async () =>  {
     const dateTimeWithTimezone = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss');
     const localDate = moment.tz(today, 'Asia/Jakarta').format('YYYY-MM-DD');
 
-
-    const kalenderLiburPadaHariIni = await KalenderLibur.findOne({
-        where:{
-            sudah_terlewati:false,
-            tanggal:localDate
-        }
-    })
-
-    const daftarKegiatanAktif = await Kegiatan.findAll({
-        where: {
-            status_kegiatan: true
-        }
-    });
-
+    // Use Promise.all to fetch data concurrently
+    const [kalenderLiburPadaHariIni, daftarKegiatanAktif] = await Promise.all([
+        KalenderLibur.findOne({
+            where: {
+                sudah_terlewati: false,
+                tanggal: localDate
+            }
+        }),
+        Kegiatan.findAll({
+            where: {
+                status_kegiatan: true
+            }
+        })
+    ]);
 
     for (let kegiatanAktif of daftarKegiatanAktif) {
         let statusAbsensi = ''
@@ -164,18 +201,16 @@ export const  updateStatusAbsensi = async () =>  {
             console.log(kegiatanAktif.nama_kegiatan);
             console.log("tidak libur perminggu");
             statusAbsensi = 'ALPA'
-
         } else {
             console.log(kegiatanAktif.nama_kegiatan);
             console.log("libur!");
-            statusAbsensi='LIBUR'
+            statusAbsensi = 'LIBUR'
         }
 
-        if (kalenderLiburPadaHariIni){
+        if (kalenderLiburPadaHariIni) {
             if (kalenderLiburPadaHariIni.dataValues.id_kegiatan_terimbas.includes(kegiatanAktif.id))
-                statusAbsensi='LIBUR'
+                statusAbsensi = 'LIBUR'
         }
-
 
         for (let kelas of kegiatanAktif.peserta) {
             const pesertaKegiatan = await kelasSantri.findAll({
@@ -185,8 +220,7 @@ export const  updateStatusAbsensi = async () =>  {
                 }
             });
 
-
-            for (const peserta of pesertaKegiatan) {
+            const absensiPromises = pesertaKegiatan.map(async (peserta) => {
                 const [absensi, created] = await Absensi.findOrCreate({
                     where: {
                         id_kegiatan: kegiatanAktif.id,
@@ -207,9 +241,10 @@ export const  updateStatusAbsensi = async () =>  {
                         last_edit: dateTimeWithTimezone
                     });
                 }
-            }
-        }
+            });
 
+            await Promise.all(absensiPromises);
+        }
     }
 }
 
@@ -418,7 +453,8 @@ export class Controller {
                         // Update existing Santri
                         const lembagaFlag = getLembagaFlag(pemilikKelas);
                         // console.log('Updating Santri with flags:', lembagaFlag);
-                        await santri.update({ nama_santri, rfid, gender, ...lembagaFlag });
+                        await santri.update({ nama_santri, gender, ...lembagaFlag });
+                        // await santri.update({ nama_santri, rfid, gender, ...lembagaFlag }); kalau bukan mts ini di uncoment
                         // console.log('Santri updated:', santri);
                     }
                 } catch (error) {
@@ -480,126 +516,6 @@ export class Controller {
 
 
 
-    // static async createManySantri(req, res){
-    //     try {
-    //         // Retrieve the array of santri data from the request body
-    //         const santrisData = req.body;
-    //         // console.log(santrisData)
-    //
-    //
-    //         // Iterate over each santri object in the array
-    //         for (const data of santrisData) {
-    //             console.log(data.nis)
-    //             // Check if a santri with the specified nis already exists in the database
-    //             const existingSantri = await Santri.findOne({where:{nis:data.nis}});
-    //             // console.log("babi")
-    //
-    //
-    //             // If the santri doesn't exist, create a new record
-    //             if (!existingSantri) {
-    //                 await Santri.create(data);
-    //             } else {
-    //                 // If the santri exists, update the existing record with the new data
-    //                 await Santri.update(data, { where: { nis: data.nis } });
-    //             }
-    //
-    //             // Define the list of institutions to check for each santri
-    //             const institutions = ['is_sdi', 'is_mts', 'is_ma', 'is_madin'];
-    //             // Calculate the tahun_ajaran based on the current year
-    //             const currentYear = new Date().getFullYear();
-    //             let tahun_ajaran = `${currentYear - 1}-${currentYear}`;
-    //
-    //             // Process each institution flag in the santri data
-    //             for (const institution of institutions) {
-    //                 // Check if the santri is associated with the current institution
-    //                 if (data[institution]) {
-    //                     // Construct the kelas field name based on the institution
-    //                     const kelasField = `kelas_${institution.split('_')[1]}`; // e.g., kelas_sdi
-    //                     const pemilikField = `${institution.split('_')[1]}`; // e.g., sdi
-    //                     if (pemilikField.toLowerCase() === 'madin'){
-    //
-    //
-    //                         const mahfudz = await tahunAjaranTabel.findOne({
-    //                             where:{
-    //                                 status:true,
-    //                                 pemilik:pemilikField.toLowerCase()
-    //                             }
-    //                         })
-    //
-    //                         // console.log("celeng")
-    //                         // console.log(mahfudz.dataValues.nama_tahun)
-    //                         tahun_ajaran = mahfudz.dataValues.nama_tahun
-    //
-    //                     }
-    //
-    //                     // Prepare the kelasSantri data for creation or update
-    //                     const kelasData = {
-    //                         nis_santri: data.nis,
-    //                         kelas: data[kelasField],
-    //                         pemilik: pemilikField,
-    //                         tahun_ajaran: tahun_ajaran
-    //                     };
-    //                     console.log("babi")
-    //                     console.log(kelasData)
-    //                     console.log(pemilikField)
-    //
-    //                     // Check if a kelasSantri record already exists for the santri and institution
-    //                     const existingKelas = await kelasSantri.findOne({
-    //                         where: {
-    //                             nis_santri: data.nis,
-    //                             pemilik: pemilikField
-    //                         }
-    //                     });
-    //
-    //                     // If the kelasSantri record doesn't exist, create a new one
-    //                     if (!existingKelas) {
-    //                         await kelasSantri.create(kelasData);
-    //                     } else {
-    //                         // If the record exists, update it with the new data
-    //                         await kelasSantri.update(kelasData, {
-    //                             where: {
-    //                                 nis_santri: data.nis,
-    //                                 pemilik: pemilikField
-    //                             }
-    //                         });
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //
-    //         // ini unutk membuat nama-nama kelas yang unik satu dengan yang lainya!
-    //
-    //
-    //         // Find unique combinations of kelas, pemilik, tahun_ajaran in kelasSantri
-    //         const uniqueCombinations = await kelasSantri.findAll({
-    //             attributes: ['kelas', 'pemilik', 'tahun_ajaran'],
-    //             group: ['kelas', 'pemilik', 'tahun_ajaran']
-    //         });
-    //
-    //         // Iterate over each unique combination found
-    //         for (const combination of uniqueCombinations) {
-    //             const { kelas, pemilik, tahun_ajaran } = combination;
-    //
-    //             // Check if this combination already exists in kelasLembaga
-    //             const existsInLembaga = await kelasLembaga.findOne({
-    //                 where: { kelas, pemilik, tahun_ajaran }
-    //             });
-    //
-    //             // If not exists, create in kelasLembaga
-    //             if (!existsInLembaga) {
-    //                 await kelasLembaga.create({ kelas, pemilik, tahun_ajaran });
-    //             }
-    //         }
-    //
-    //
-    //         // Send a success response after processing all santri data
-    //         res.status(200).json({ message: 'Batch processing of santris completed. dan nama kelas lembaga telah dibuat' });
-    //     } catch (error) {
-    //         // Send an error response if any exception occurs
-    //         res.status(500).json({ error: error.message });
-    //     }
-    // }
-
     static async findAllsantri(req, res){
         try {
             console.log(req.body.merge)
@@ -609,6 +525,40 @@ export class Controller {
             res.status(400).json({ error: error.message });
         }
     }
+    static async findAllsantriSemesteran(req, res){
+        try {
+            console.log(req.body.merge)
+            const santris = await Santri.findAll({
+                where:{is_madin:true}
+            });
+
+            const santriData = await Promise.all(santris.map(async (santriKelas)=>{
+                const dataKelasSantri = await kelasSantri.findOne({
+                    where:{
+                        nis_santri:santriKelas.nis,
+                        pemilik:"madin"
+                    }
+                })
+
+
+            return {
+                id_murid:santriKelas.nis,
+                gender:santriKelas.gender,
+                nama_murid:santriKelas.nama_santri,
+                rfid:santriKelas.rfid,
+                id_kelas:dataKelasSantri ? idKelasMadinku[dataKelasSantri.kelas]:null,
+                kelas:dataKelasSantri ? dataKelasSantri.kelas:null
+
+            }
+            }))
+
+            res.status(201).json(santriData);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+
     static async findOneSantri(req, res){
         try {
             const nis = req.params.nis;
@@ -676,7 +626,7 @@ export class Controller {
     static async updateOneKelas (req, res){
         try {
             const kelas = await kelasSantri.update(  req.body ,{
-                where:{nis_santri:req.params.nis}
+                where:{nis_santri:req.params.nis, pemilik:req.body.pemilik}
             });
             res.status(201).json(kelas);
         } catch (error) {
@@ -834,6 +784,17 @@ export class Controller {
     static async updateOneKegiatan (req, res){
         try {
             const kelas = await Kegiatan.update(  req.body ,{
+                where:{id:req.body.id}
+            });
+            res.status(201).json(kelas);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async deleteOneKegiatan (req, res){
+        try {
+            const kelas = await Kegiatan.destroy(  {
                 where:{id:req.body.id}
             });
             res.status(201).json(kelas);

@@ -4,6 +4,7 @@ import {Controller} from "./controller.js";
 
 router.get('/santri/:nis',Controller.findOneSantri)
 router.get('/all-santri',Controller.findAllsantri)
+router.get('/all-santri-semester',Controller.findAllsantriSemesteran)
 router.post('/create-santri',Controller.createOneSantri)
 router.post('/create-santri-banyak',Controller.createManySantri)
 router.patch('/update-santri/:nis',Controller.updateOneSantri)
@@ -20,6 +21,7 @@ router.get('/kegiatan/:id',Controller.findOneKegiatan)
 router.get('/all-kegiatan',Controller.findAllKegiatan)
 router.post('/create-kegiatan',Controller.createOneKegiatan)
 router.patch('/update-kegiatan',Controller.updateOneKegiatan)
+router.delete('/delete-kegiatan',Controller.deleteOneKegiatan)
 
 router.get('/get-mesin-kegiatan/:id',Controller.getKegiatanMesin)
 router.get('/get-dbsantri/:pemilik',Controller.getDbSantri)
